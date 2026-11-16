@@ -3,3 +3,5 @@ kit.tar.gz
 out/
 node_modules/
 .DS_Store
+shots-tmp/
+transcripts.tar.gz
