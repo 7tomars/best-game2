@@ -403,6 +403,7 @@ function applyShot(kind, seed) {
   game.time = 41.7;
   game.wave = 3;
   game.score = 1640;
+  game.best = kind === 'start' ? 0 : 5200;
   game.flame = 74;
   game.gauge = kind === 'daybreak' ? DAYBREAK.max : 63;
   game.kills = 23;
@@ -430,9 +431,14 @@ function applyShot(kind, seed) {
     game.bolts.push(new Bolt(game.player.x + Math.cos(a) * 190, game.player.y + Math.sin(a) * 190, Math.cos(a) * 500, Math.sin(a) * 500, { friendly: true }));
     burst(ARENA.cx + 150, ARENA.cy - 70, { count: 12, color: '#ffe9a8', speed: 120, size: 2.6, life: 0.6 });
     if (kind === 'daybreak') {
-      triggerDaybreak();
-      game.daybreakFx = { t: 0.62, dur: 1.15 };
-      game.arenaFlash = 0.35;
+      // Freeze the moment the dawn breaks: ring mid-flight, gauge spent.
+      game.gauge = 14;
+      game.flame = Math.min(game.maxFlame, game.flame + DAYBREAK.flameGift);
+      game.daybreakFx = { t: 0.58, dur: 1.15 };
+      game.arenaFlash = 0.32;
+      for (const shade of game.shades) shade.knock(LANTERN.x, LANTERN.y, DAYBREAK.knockback * 0.4);
+      burst(LANTERN.x, LANTERN.y, { count: 80, color: '#ffe98a', speed: 430, size: 4, life: 1.1 });
+      addText(LANTERN.x, LANTERN.y - 92, 'DAYBREAK', '#fff6cf');
     }
   } else if (kind === 'end') {
     game.state = 'victory';
@@ -460,17 +466,19 @@ if (shot) {
 }
 
 canvas.addEventListener('mousedown', () => {
-  if (game.state === 'title') { audio.uiClick(); resetRun(); }
-  else if (game.state === 'gameover' || game.state === 'victory') { /* R / Enter only */ }
+  if (game.state === 'title') { audio.uiClick(); resetRun(); input.mouse.down = false; }
 });
 
 let last = performance.now();
+const frozen = Boolean(shot); // screenshot mode: render the composed scene, don't simulate
 function frame(now) {
   let dt = (now - last) / 1000;
   last = now;
   dt = Math.min(dt, 1 / 30);
-  handleGlobalKeys();
-  update(dt);
+  if (!frozen) {
+    handleGlobalKeys();
+    update(dt);
+  }
   render();
   requestAnimationFrame(frame);
 }

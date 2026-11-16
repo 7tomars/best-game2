@@ -43,6 +43,15 @@ export function drawTitle(ctx, time, best) {
   ctx.fillStyle = '#cbbfe8';
   ctx.fillText('the last lantern on the moon is still lit — keep it that way', VIEW.w / 2, 268);
 
+  // A soft dark panel so the controls read over the lantern glow.
+  ctx.fillStyle = 'rgba(5,6,16,0.6)';
+  ctx.beginPath();
+  ctx.roundRect(VIEW.w / 2 - 330, 322, 660, 176, 12);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(245,200,110,0.22)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
   // Controls.
   ctx.font = '15px Georgia, serif';
   ctx.fillStyle = '#e8e2d0';
@@ -216,7 +225,14 @@ export function drawEnd(ctx, game, time) {
     ctx.fillText('ash settles on the crater; somewhere, a new spark is struck', VIEW.w / 2, 274);
   }
 
-  // The ledger of the vigil.
+  // The ledger of the vigil, on its own dark slate for legibility.
+  ctx.fillStyle = 'rgba(5,6,16,0.68)';
+  ctx.beginPath();
+  ctx.roundRect(VIEW.w / 2 - 300, 316, 600, 190, 12);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(245,200,110,0.25)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
   const stats = [
     ['waves weathered', victory ? `${WAVES} / ${WAVES}` : `${Math.max(0, game.wave - 1)} / ${WAVES}`],
     ['shades cleansed', `${game.kills}`],
