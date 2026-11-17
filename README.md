@@ -26,17 +26,22 @@ Or open `game/index.html` in any current desktop browser.
 | WASD / Arrow keys | Walk the crater |
 | Mouse | Aim the spark-staff |
 | Left click | Radiant bolt |
+| Shift / Right click | **Dash / Dodge** — quick burst of invulnerability with radiant afterimages |
 | Space | **Daybreak** — when the gauge is full, a dawn-nova that sears every shade in the bowl and rekindles the flame |
-| P | Pause |
-| B | Bestiary — the seven shades, drawn and named |
+| P / Esc / Click | Pause / Unpause |
+| B / Esc / Click | Bestiary — the seven shades, drawn and named |
 | M | Mute |
-| R | Rekindle (from the end screens) |
+| R / Enter / Click | Rekindle (from the end screens) |
 
 ## The vigil
 
 Survive **10 waves**. Shades that reach the Great Lantern gnaw the flame; if
-the flame dies, the moon goes dark. The Daybreak gauge fills as you land hits,
-and one well-timed dawn can turn a collapsing wave.
+the flame dies, the moon goes dark.
+
+- **Radiant Shards**: Defeated elite shades drop glowing star shards. Draw them close magnetically to recover lantern flame, restore warden HP, and boost Daybreak gauge.
+- **Combo Streak**: String together rapid cleanses to build a combo multiplier up to 5x.
+- **Spark-Staff & Dash**: Time your dashes to dodge lunging hounds and mourning dive attacks.
+- **Daybreak Nova**: Fills as you land hits and gather shards; release when surrounded to cleanse the crater bowl.
 
 ### The bestiary
 

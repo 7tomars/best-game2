@@ -2,7 +2,7 @@
 // bolt and the light-dust that lingers after something burns. No drawing here;
 // render.js reads these objects and paints them.
 
-import { ARENA, LANTERN, PLAYER, DAYBREAK } from './config.js';
+import { ARENA, LANTERN, PLAYER, DAYBREAK, DASH, SHARD_DROP } from './config.js';
 import { BESTIARY_BY_ID } from './bestiary.js';
 
 export class Player {
@@ -13,6 +13,12 @@ export class Player {
     this.hp = PLAYER.maxHp;
     this.fireCooldown = 0;
     this.hurtTimer = 0;
+    this.dashTimer = 0;
+    this.dashCooldown = 0;
+    this.dashing = false;
+    this.dashVx = 0;
+    this.dashVy = 0;
+    this.afterimages = [];
     this.kx = 0; // knockback velocity
     this.ky = 0;
     this.walkPhase = 0;
@@ -21,12 +27,26 @@ export class Player {
   }
 
   update(dt, input) {
-    const move = input.moveVector();
-    this.moving = move.x !== 0 || move.y !== 0;
-    if (this.moving) this.walkPhase += dt * 11;
-    const len = Math.hypot(move.x, move.y) || 1;
-    this.x += (move.x / len) * PLAYER.speed * dt + this.kx * dt;
-    this.y += (move.y / len) * PLAYER.speed * dt + this.ky * dt;
+    this.dashCooldown = Math.max(0, this.dashCooldown - dt);
+    // Afterimages decay
+    for (const a of this.afterimages) a.life -= dt;
+    this.afterimages = this.afterimages.filter((a) => a.life > 0);
+
+    if (this.dashTimer > 0) {
+      this.dashTimer -= dt;
+      this.x += this.dashVx * dt;
+      this.y += this.dashVy * dt;
+      this.walkPhase += dt * 18;
+      this.afterimages.push({ x: this.x, y: this.y, life: 0.18, maxLife: 0.18, aim: { ...this.aim } });
+      if (this.dashTimer <= 0) this.dashing = false;
+    } else {
+      const move = input.moveVector();
+      this.moving = move.x !== 0 || move.y !== 0;
+      if (this.moving) this.walkPhase += dt * 11;
+      const len = Math.hypot(move.x, move.y) || 1;
+      this.x += (move.x / len) * PLAYER.speed * dt + this.kx * dt;
+      this.y += (move.y / len) * PLAYER.speed * dt + this.ky * dt;
+    }
     this.kx *= Math.pow(0.0009, dt);
     this.ky *= Math.pow(0.0009, dt);
     // Stay inside the crater rim.
@@ -46,8 +66,30 @@ export class Player {
     if (aimLen > 1) this.aim = { x: ax / aimLen, y: ay / aimLen };
   }
 
+  canDash() {
+    return this.dashCooldown <= 0;
+  }
+
+  dash(moveVector) {
+    if (!this.canDash()) return false;
+    let dx = moveVector.x;
+    let dy = moveVector.y;
+    if (dx === 0 && dy === 0) {
+      dx = this.aim.x;
+      dy = this.aim.y;
+    }
+    const len = Math.hypot(dx, dy) || 1;
+    this.dashVx = (dx / len) * DASH.speed;
+    this.dashVy = (dy / len) * DASH.speed;
+    this.dashTimer = DASH.duration;
+    this.dashCooldown = DASH.cooldown;
+    this.hurtTimer = Math.max(this.hurtTimer, DASH.invuln);
+    this.dashing = true;
+    return true;
+  }
+
   canFire() {
-    return this.fireCooldown <= 0;
+    return this.fireCooldown <= 0 && !this.dashing;
   }
 
   fire() {
@@ -245,5 +287,48 @@ export class FloatText {
     this.y -= 34 * dt;
     this.life -= dt;
     if (this.life <= 0) this.dead = true;
+  }
+}
+
+export class RadiantShard {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.vx = 0;
+    this.vy = 0;
+    this.radius = SHARD_DROP.radius;
+    this.life = SHARD_DROP.life;
+    this.maxLife = SHARD_DROP.life;
+    this.bob = Math.random() * Math.PI * 2;
+    this.dead = false;
+  }
+
+  update(dt, player) {
+    this.life -= dt;
+    this.bob += dt * 3.8;
+    if (this.life <= 0) {
+      this.dead = true;
+      return;
+    }
+    const dx = player.x - this.x;
+    const dy = player.y - this.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < SHARD_DROP.magnetRadius && dist > 1) {
+      const pull = (1 - dist / SHARD_DROP.magnetRadius) * SHARD_DROP.magnetSpeed;
+      this.vx += (dx / dist) * pull * dt * 4;
+      this.vy += (dy / dist) * pull * dt * 4;
+    }
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+    this.vx *= Math.pow(0.04, dt);
+    this.vy *= Math.pow(0.04, dt);
+
+    const cdx = this.x - ARENA.cx;
+    const cdy = this.y - ARENA.cy;
+    const cdist = Math.hypot(cdx, cdy);
+    if (cdist > ARENA.rim) {
+      this.x = ARENA.cx + (cdx / cdist) * ARENA.rim;
+      this.y = ARENA.cy + (cdy / cdist) * ARENA.rim;
+    }
   }
 }

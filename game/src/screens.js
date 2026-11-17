@@ -46,37 +46,38 @@ export function drawTitle(ctx, time, best) {
   // A soft dark panel so the controls read over the lantern glow.
   ctx.fillStyle = 'rgba(5,6,16,0.6)';
   ctx.beginPath();
-  ctx.roundRect(VIEW.w / 2 - 330, 322, 660, 176, 12);
+  ctx.roundRect(VIEW.w / 2 - 340, 318, 680, 182, 12);
   ctx.fill();
   ctx.strokeStyle = 'rgba(245,200,110,0.22)';
   ctx.lineWidth = 1;
   ctx.stroke();
 
   // Controls.
-  ctx.font = '15px Georgia, serif';
+  ctx.font = '14.5px Georgia, serif';
   ctx.fillStyle = '#e8e2d0';
   const lines = [
-    'WASD or ARROW KEYS — walk the crater',
+    'WASD or ARROW KEYS — walk the crater bowl',
+    'SHIFT or RIGHT CLICK — dash dodge through shadows',
     'MOUSE — aim      ·      LEFT CLICK — radiant bolt',
-    'SPACE — DAYBREAK when the gauge is full',
-    'P — pause      ·      B — bestiary      ·      M — mute',
+    'SPACE — DAYBREAK nova when the gauge is full',
+    'P / ESC — pause      ·      B — bestiary      ·      M — mute',
   ];
-  lines.forEach((line, i) => ctx.fillText(line, VIEW.w / 2, 348 + i * 27));
+  lines.forEach((line, i) => ctx.fillText(line, VIEW.w / 2, 342 + i * 26));
 
   // The call to begin.
   const pulse = 0.7 + 0.3 * Math.sin(time * 3.4);
   ctx.globalAlpha = pulse;
   ctx.font = 'bold 22px Georgia, serif';
   ctx.fillStyle = '#ffe98a';
-  ctx.fillText('— CLICK OR PRESS ENTER TO BEGIN THE VIGIL —', VIEW.w / 2, 512);
+  ctx.fillText('— CLICK OR PRESS ENTER TO BEGIN THE VIGIL —', VIEW.w / 2, 524);
   ctx.globalAlpha = 1;
 
   ctx.font = '13px Georgia, serif';
   ctx.fillStyle = 'rgba(232,226,208,0.66)';
-  ctx.fillText(`Survive ${WAVES} waves. If the flame dies, the moon goes dark.`, VIEW.w / 2, 556);
+  ctx.fillText(`Survive ${WAVES} waves. If the flame dies, the moon goes dark.`, VIEW.w / 2, 558);
   if (best > 0) {
     ctx.fillStyle = 'rgba(255,233,168,0.8)';
-    ctx.fillText(`greatest vigil yet: ${best} points`, VIEW.w / 2, 580);
+    ctx.fillText(`greatest vigil yet: ${best} points`, VIEW.w / 2, 582);
   }
   ctx.restore();
 }
@@ -87,11 +88,11 @@ export function drawPause(ctx) {
   ctx.textAlign = 'center';
   ctx.font = 'bold 44px Georgia, serif';
   ctx.fillStyle = '#f5f0dd';
-  ctx.fillText('THE VIGIL HOLDS', VIEW.w / 2, 340);
+  ctx.fillText('THE VIGIL HOLDS', VIEW.w / 2, 330);
   ctx.font = '17px Georgia, serif';
   ctx.fillStyle = '#cbbfe8';
-  ctx.fillText('paused — press P to return to the light', VIEW.w / 2, 386);
-  ctx.fillText('or R to abandon the vigil and start anew', VIEW.w / 2, 414);
+  ctx.fillText('paused — press P, ESC, or CLICK to return to the light', VIEW.w / 2, 376);
+  ctx.fillText('or R to abandon the vigil and start anew', VIEW.w / 2, 404);
   ctx.restore();
 }
 
@@ -155,7 +156,7 @@ export function drawBestiary(ctx, time, page = 0) {
   ctx.textAlign = 'center';
   ctx.font = '13px Georgia, serif';
   ctx.fillStyle = 'rgba(255,233,138,0.9)';
-  ctx.fillText('press B to close the book', VIEW.w / 2, y + h - 16);
+  ctx.fillText('press B, ESC, or CLICK anywhere to close the book', VIEW.w / 2, y + h - 16);
   ctx.restore();
 }
 
@@ -228,7 +229,7 @@ export function drawEnd(ctx, game, time) {
   // The ledger of the vigil, on its own dark slate for legibility.
   ctx.fillStyle = 'rgba(5,6,16,0.68)';
   ctx.beginPath();
-  ctx.roundRect(VIEW.w / 2 - 300, 316, 600, 190, 12);
+  ctx.roundRect(VIEW.w / 2 - 320, 310, 640, 216, 12);
   ctx.fill();
   ctx.strokeStyle = 'rgba(245,200,110,0.25)';
   ctx.lineWidth = 1;
@@ -236,12 +237,14 @@ export function drawEnd(ctx, game, time) {
   const stats = [
     ['waves weathered', victory ? `${WAVES} / ${WAVES}` : `${Math.max(0, game.wave - 1)} / ${WAVES}`],
     ['shades cleansed', `${game.kills}`],
+    ['radiant shards collected', `${game.shardsCount || 0}`],
+    ['highest combo streak', `${game.maxCombo || 0}x`],
     ['final score', `${game.score}`],
   ];
   if (game.score >= game.best && game.score > 0) stats.push(['', '— a new greatest vigil —']);
-  ctx.font = '19px Georgia, serif';
+  ctx.font = '16.5px Georgia, serif';
   stats.forEach(([label, value], i) => {
-    const yy = 352 + i * 36;
+    const yy = 340 + i * 30;
     ctx.fillStyle = 'rgba(232,226,208,0.75)';
     ctx.textAlign = 'right';
     ctx.fillText(label, VIEW.w / 2 - 18, yy);
@@ -255,10 +258,7 @@ export function drawEnd(ctx, game, time) {
   ctx.textAlign = 'center';
   ctx.font = 'bold 21px Georgia, serif';
   ctx.fillStyle = '#ffe98a';
-  ctx.fillText('PRESS R TO KINDLE THE FLAME ANEW', VIEW.w / 2, 540);
+  ctx.fillText('CLICK, PRESS R OR ENTER TO KINDLE THE FLAME ANEW', VIEW.w / 2, 550);
   ctx.globalAlpha = 1;
-  ctx.font = '13px Georgia, serif';
-  ctx.fillStyle = 'rgba(232,226,208,0.6)';
-  ctx.fillText('or ENTER for the same', VIEW.w / 2, 566);
   ctx.restore();
 }

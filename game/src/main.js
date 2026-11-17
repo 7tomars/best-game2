@@ -3,15 +3,18 @@
 // the bestiary stand aside from both endings. Everything else lives in its own
 // file; this one only conducts.
 
-import { VIEW, ARENA, LANTERN, PLAYER, DAYBREAK, WAVES, CALM_BETWEEN_WAVES, GAUGE_PER_WAVE, MAX_PARTICLES, MAX_BOLTS } from './config.js';
+import {
+  VIEW, ARENA, LANTERN, PLAYER, DAYBREAK, DASH, SHARD_DROP, COMBO,
+  WAVES, CALM_BETWEEN_WAVES, GAUGE_PER_WAVE, MAX_PARTICLES, MAX_BOLTS,
+} from './config.js';
 import { makeRng } from './random.js';
 import { Input } from './input.js';
 import { AudioEngine } from './audio.js';
 import { buildSpawnQueue, spawnInterval } from './waves.js';
-import { Player, Shade, Bolt, Particle, FloatText } from './entities.js';
+import { Player, Shade, Bolt, Particle, FloatText, RadiantShard } from './entities.js';
 import {
   drawBackdrop, drawLantern, drawShade, drawBolt, drawParticle, drawFloatText,
-  drawPlayer, drawDaybreakNova, drawHud, drawVignette,
+  drawPlayer, drawDaybreakNova, drawHud, drawVignette, drawShard, drawAimReticle,
 } from './render.js';
 import { drawTitle, drawPause, drawBestiary, drawWaveBanner, drawEnd } from './screens.js';
 
@@ -38,6 +41,11 @@ const game = {
   rng: makeRng(Date.now() & 0xffffffff),
   player: new Player(ARENA.cx, ARENA.cy + 150),
   shades: [],
+  shards: [],
+  shardsCount: 0,
+  combo: 0,
+  comboTimer: 0,
+  maxCombo: 0,
   bolts: [],
   particles: [],
   texts: [],
@@ -68,6 +76,11 @@ function resetRun(seed) {
   game.rng = makeRng(seed ?? (Date.now() & 0xffffffff));
   game.player = new Player(ARENA.cx, ARENA.cy + 150);
   game.shades = [];
+  game.shards = [];
+  game.shardsCount = 0;
+  game.combo = 0;
+  game.comboTimer = 0;
+  game.maxCombo = 0;
   game.bolts = [];
   game.particles = [];
   game.texts = [];
@@ -83,6 +96,8 @@ function resetRun(seed) {
   game.daybreakFx = null;
   game.calmTimer = 0;
   game.overTimer = 0;
+  audio.startAmbient();
+  audio.setAmbientLevel(1.0);
   startWave(1);
   game.state = 'playing';
 }
@@ -167,10 +182,24 @@ function killShade(index) {
   const shade = game.shades[index];
   game.shades.splice(index, 1);
   game.kills += 1;
-  game.score += shade.def.score;
-  addText(shade.x, shade.y - 8, `+${shade.def.score}`, '#ffe9a8');
+
+  // Combo streak calculation
+  game.combo += 1;
+  game.comboTimer = COMBO.timeout;
+  game.maxCombo = Math.max(game.maxCombo, game.combo);
+  const mult = Math.min(game.combo, COMBO.maxMultiplier);
+  const killScore = shade.def.score * mult;
+  game.score += killScore;
+
+  addText(shade.x, shade.y - 8, mult > 1 ? `+${killScore} (x${mult})` : `+${killScore}`, mult > 1 ? '#ffdf6d' : '#ffe9a8');
   burst(shade.x, shade.y, { count: 16, color: shade.def.hue, speed: 170, size: 3.4, life: 0.8 });
   audio.shadeDown();
+
+  // Radiant Shards dropped by elites or with 28% chance
+  const shardCarriers = ['bulwark', 'witch', 'mournwing', 'hound', 'knight'];
+  if (shardCarriers.includes(shade.id) || (shade.def && shade.def.boss) || game.rng.range(0, 1) < 0.28) {
+    game.shards.push(new RadiantShard(shade.x, shade.y, game.rng));
+  }
 }
 
 function update(dt) {
@@ -184,8 +213,45 @@ function update(dt) {
   }
 
   if (game.state === 'playing' || game.state === 'calm') {
+    // Dash dodge input (Shift or Right Click)
+    if (input.wasPressed('ShiftLeft') || input.wasPressed('ShiftRight') || input.wasPressed('Mouse2')) {
+      if (game.player.dash(input.moveVector())) {
+        audio.dash();
+        burst(game.player.x, game.player.y, { count: 14, color: '#9ff0e4', speed: 180, size: 2.8, life: 0.35 });
+      }
+    }
+
     game.player.update(dt, input);
     if (input.mouse.down) firePlayerBolt();
+
+    // Combo timer decay
+    if (game.comboTimer > 0) {
+      game.comboTimer -= dt;
+      if (game.comboTimer <= 0) {
+        game.combo = 0;
+      }
+    }
+
+    // Radiant Shards update & magnetic pickup
+    for (const s of game.shards) s.update(dt, game.player);
+    for (const s of game.shards) {
+      if (s.dead) continue;
+      const dist = Math.hypot(s.x - game.player.x, s.y - game.player.y);
+      if (dist < game.player.radius + s.radius + 10) {
+        s.dead = true;
+        game.shardsCount += 1;
+        game.flame = Math.min(game.maxFlame, game.flame + SHARD_DROP.flameHeal);
+        game.player.hp = Math.min(PLAYER.maxHp, game.player.hp + SHARD_DROP.hpHeal);
+        game.gauge = Math.min(DAYBREAK.max, game.gauge + SHARD_DROP.gaugeBoost);
+        const mult = Math.max(1, Math.min(game.combo, COMBO.maxMultiplier));
+        const shardScore = SHARD_DROP.score * mult;
+        game.score += shardScore;
+        addText(s.x, s.y - 14, `+${shardScore} ✦`, '#ffe9a8');
+        burst(s.x, s.y, { count: 14, color: '#fff0a8', speed: 140, size: 3.2, life: 0.6 });
+        audio.shardPickup();
+      }
+    }
+    game.shards = game.shards.filter((s) => !s.dead);
 
     // Wave spawning.
     if (game.state === 'playing' && game.spawnQueue.length > 0) {
@@ -284,6 +350,7 @@ function update(dt) {
         game.best = Math.max(game.best, game.score);
         saveBest(game.best);
         audio.victory();
+        audio.setAmbientLevel(0.3);
         burst(LANTERN.x, LANTERN.y, { count: 120, color: '#fff3b8', speed: 380, size: 4, life: 1.4 });
       } else {
         game.state = 'calm';
@@ -292,10 +359,14 @@ function update(dt) {
         game.bannerDuration = CALM_BETWEEN_WAVES;
         game.bannerTime = CALM_BETWEEN_WAVES;
         audio.waveClear();
+        audio.setAmbientLevel(0.65);
       }
     } else if (game.state === 'calm') {
       game.calmTimer -= dt;
-      if (game.calmTimer <= 0) startWave(game.wave + 1);
+      if (game.calmTimer <= 0) {
+        audio.setAmbientLevel(1.0);
+        startWave(game.wave + 1);
+      }
     }
 
     // The flame dies; the vigil ends.
@@ -306,6 +377,7 @@ function update(dt) {
       game.best = Math.max(game.best, game.score);
       saveBest(game.best);
       audio.gameOver();
+      audio.setAmbientLevel(0.3);
       burst(LANTERN.x, LANTERN.y, { count: 60, color: '#554488', speed: 220, size: 3.6, life: 1.3 });
     }
     if (game.player.hp <= 0) {
@@ -314,6 +386,7 @@ function update(dt) {
       game.best = Math.max(game.best, game.score);
       saveBest(game.best);
       audio.gameOver();
+      audio.setAmbientLevel(0.3);
     }
   } else if (game.state === 'gameover' || game.state === 'victory') {
     game.overTimer += dt;
@@ -333,17 +406,34 @@ function handleGlobalKeys() {
   if (input.wasPressed('KeyB')) {
     if (game.state === 'bestiary') {
       game.state = game.prevState;
+      audio.setAmbientLevel(game.state === 'playing' || game.state === 'calm' ? 1.0 : 0.4);
     } else if (game.state === 'title' || game.state === 'paused' || game.state === 'playing' || game.state === 'calm') {
       game.prevState = game.state;
       game.state = 'bestiary';
+      audio.setAmbientLevel(0.4);
     }
   }
   if (input.wasPressed('KeyP')) {
     if (game.state === 'playing' || game.state === 'calm') {
       game.prevState = game.state;
       game.state = 'paused';
+      audio.setAmbientLevel(0.4);
     } else if (game.state === 'paused') {
       game.state = game.prevState === 'paused' ? 'playing' : game.prevState;
+      audio.setAmbientLevel(1.0);
+    }
+  }
+  if (input.wasPressed('Escape')) {
+    if (game.state === 'bestiary') {
+      game.state = game.prevState;
+      audio.setAmbientLevel(game.state === 'playing' || game.state === 'calm' ? 1.0 : 0.4);
+    } else if (game.state === 'paused') {
+      game.state = game.prevState === 'paused' ? 'playing' : game.prevState;
+      audio.setAmbientLevel(1.0);
+    } else if (game.state === 'playing' || game.state === 'calm') {
+      game.prevState = game.state;
+      game.state = 'paused';
+      audio.setAmbientLevel(0.4);
     }
   }
   if (input.wasPressed('KeyR') && (game.state === 'gameover' || game.state === 'victory' || game.state === 'paused')) {
@@ -364,9 +454,13 @@ function render() {
 
   drawBackdrop(ctx, game.time);
   drawLantern(ctx, game.time, game.flame / game.maxFlame);
+  for (const shard of game.shards) drawShard(ctx, shard, game.time);
   for (const bolt of game.bolts) drawBolt(ctx, bolt, game.time);
   for (const shade of game.shades) drawShade(ctx, shade, game.time);
   drawPlayer(ctx, game.player, game.time);
+  if ((game.state === 'playing' || game.state === 'calm') && !frozen) {
+    drawAimReticle(ctx, input.mouse, game.time);
+  }
   for (const p of game.particles) drawParticle(ctx, p);
   for (const t of game.texts) drawFloatText(ctx, t);
   drawDaybreakNova(ctx, game, game.time);
@@ -408,6 +502,11 @@ function applyShot(kind, seed) {
   game.gauge = kind === 'daybreak' ? DAYBREAK.max : 63;
   game.kills = 23;
   game.bannerTime = 0;
+  game.shards = [];
+  game.shardsCount = kind === 'start' ? 0 : (kind === 'end' ? 14 : 5);
+  game.combo = kind === 'play' ? 3 : (kind === 'daybreak' ? 4 : 0);
+  game.comboTimer = kind === 'play' || kind === 'daybreak' ? 2.1 : 0;
+  game.maxCombo = kind === 'start' ? 0 : 5;
   game.player = new Player(ARENA.cx - 120, ARENA.cy + 128);
   game.player.aim = { x: 0.86, y: -0.5 };
 
@@ -430,6 +529,8 @@ function applyShot(kind, seed) {
     game.bolts.push(new Bolt(game.player.x + Math.cos(a) * 60, game.player.y + Math.sin(a) * 60, Math.cos(a) * 500, Math.sin(a) * 500, { friendly: true }));
     game.bolts.push(new Bolt(game.player.x + Math.cos(a) * 190, game.player.y + Math.sin(a) * 190, Math.cos(a) * 500, Math.sin(a) * 500, { friendly: true }));
     burst(ARENA.cx + 150, ARENA.cy - 70, { count: 12, color: '#ffe9a8', speed: 120, size: 2.6, life: 0.6 });
+    game.shards.push(new RadiantShard(ARENA.cx - 65, ARENA.cy + 35, shotRng));
+    game.shards.push(new RadiantShard(ARENA.cx + 85, ARENA.cy + 80, shotRng));
     if (kind === 'daybreak') {
       // Freeze the moment the dawn breaks: ring mid-flight, gauge spent.
       game.gauge = 14;
@@ -465,8 +566,29 @@ if (shot) {
   applyShot(shot, seed);
 }
 
-canvas.addEventListener('mousedown', () => {
-  if (game.state === 'title') { audio.uiClick(); resetRun(); input.mouse.down = false; }
+canvas.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  if (game.state === 'title') {
+    audio.uiClick();
+    resetRun();
+    input.mouse.down = false;
+  } else if (game.state === 'gameover' || game.state === 'victory') {
+    if (game.overTimer > 0.6) {
+      audio.uiClick();
+      resetRun();
+      input.mouse.down = false;
+    }
+  } else if (game.state === 'paused') {
+    audio.uiClick();
+    game.state = game.prevState === 'paused' ? 'playing' : game.prevState;
+    audio.setAmbientLevel(1.0);
+    input.mouse.down = false;
+  } else if (game.state === 'bestiary') {
+    audio.uiClick();
+    game.state = game.prevState;
+    audio.setAmbientLevel(game.state === 'playing' || game.state === 'calm' ? 1.0 : 0.4);
+    input.mouse.down = false;
+  }
 });
 
 let last = performance.now();

@@ -4,16 +4,17 @@
 const MOVE_KEYS = new Set([
   'KeyW', 'KeyA', 'KeyS', 'KeyD',
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+  'ShiftLeft', 'ShiftRight',
 ]);
 
 export class Input {
   constructor(canvas) {
     this.canvas = canvas;
     this.keys = new Set();
-    this.mouse = { x: 640, y: 300, down: false };
-    this.pressed = new Set(); // keys pressed this frame, cleared by endFrame()
+    this.mouse = { x: 640, y: 300, down: false, rightDown: false };
+    this.pressed = new Set(); // keys/buttons pressed this frame, cleared by endFrame()
     this._onKeyDown = (event) => {
-      if (MOVE_KEYS.has(event.code) || event.code === 'Space') event.preventDefault();
+      if (MOVE_KEYS.has(event.code) || event.code === 'Space' || event.code === 'Escape') event.preventDefault();
       if (!event.repeat) this.pressed.add(event.code);
       this.keys.add(event.code);
     };
@@ -24,11 +25,17 @@ export class Input {
       this.mouse.y = ((event.clientY - rect.top) / rect.height) * this.canvas.height;
     };
     this._onMouseDown = (event) => {
-      if (event.button === 0) this.mouse.down = true;
-      this.pressed.add('Mouse0');
+      if (event.button === 0) {
+        this.mouse.down = true;
+        this.pressed.add('Mouse0');
+      } else if (event.button === 2) {
+        this.mouse.rightDown = true;
+        this.pressed.add('Mouse2');
+      }
     };
     this._onMouseUp = (event) => {
       if (event.button === 0) this.mouse.down = false;
+      if (event.button === 2) this.mouse.rightDown = false;
     };
     this._onContext = (event) => event.preventDefault();
     window.addEventListener('keydown', this._onKeyDown);

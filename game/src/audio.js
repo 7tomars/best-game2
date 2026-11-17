@@ -25,7 +25,52 @@ export class AudioEngine {
   toggleMute() {
     this.muted = !this.muted;
     if (this.master) this.master.gain.value = this.muted ? 0 : 0.42;
+    if (this.ambientGain) this.ambientGain.gain.value = this.muted ? 0 : 0.14;
     return this.muted;
+  }
+
+  startAmbient() {
+    const ctx = this.ensure();
+    if (!ctx || this.ambientGain) return;
+    this.ambientGain = ctx.createGain();
+    this.ambientGain.gain.setValueAtTime(this.muted ? 0 : 0.14, ctx.currentTime);
+    this.ambientGain.connect(this.master);
+
+    const osc1 = ctx.createOscillator();
+    osc1.type = 'triangle';
+    osc1.frequency.setValueAtTime(55, ctx.currentTime);
+
+    const osc2 = ctx.createOscillator();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(82.4, ctx.currentTime);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(320, ctx.currentTime);
+
+    osc1.connect(filter);
+    osc2.connect(filter);
+    filter.connect(this.ambientGain);
+
+    osc1.start();
+    osc2.start();
+    this._ambientOscs = [osc1, osc2];
+  }
+
+  setAmbientLevel(level = 1.0) {
+    if (!this.ctx || !this.ambientGain) return;
+    const target = this.muted ? 0 : 0.14 * level;
+    this.ambientGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.35);
+  }
+
+  dash() {
+    this.noise({ dur: 0.16, gain: 0.22, lowpass: 1800 });
+    this.tone({ freq: 420, type: 'sine', dur: 0.18, gain: 0.18, slide: 320 });
+  }
+
+  shardPickup() {
+    [783.9, 1046.5, 1318.5].forEach((freq, i) =>
+      this.tone({ freq, type: 'sine', dur: 0.22, gain: 0.2, delay: i * 0.06 }));
   }
 
   tone({ freq = 440, type = 'sine', dur = 0.15, gain = 0.5, slide = 0, delay = 0 }) {

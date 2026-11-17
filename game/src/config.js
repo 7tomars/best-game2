@@ -42,6 +42,30 @@ export const DAYBREAK = {
   radius: 9999,       // the whole arena feels it
 };
 
+export const DASH = {
+  speed: 640,
+  duration: 0.16,
+  cooldown: 0.85,
+  invuln: 0.22,
+};
+
+export const SHARD_DROP = {
+  radius: 10,
+  pickupRadius: 32,
+  magnetRadius: 145,
+  magnetSpeed: 360,
+  flameHeal: 5,
+  hpHeal: 8,
+  gaugeBoost: 10,
+  score: 120,
+  life: 16.0,
+};
+
+export const COMBO = {
+  timeout: 2.4,
+  maxMultiplier: 5,
+};
+
 export const WAVES = 10;             // survive this many waves to see the dawn
 export const CALM_BETWEEN_WAVES = 3.4;
 export const GAUGE_PER_WAVE = 14;

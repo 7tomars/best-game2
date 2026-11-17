@@ -2,7 +2,7 @@
 // Lantern and its flame, the shades, the bolts, the dust and the HUD. Screens
 // (title, pause, bestiary, the endings) live in screens.js.
 
-import { VIEW, ARENA, LANTERN, DAYBREAK, PLAYER } from './config.js';
+import { VIEW, ARENA, LANTERN, DAYBREAK, PLAYER, DASH, SHARD_DROP, COMBO } from './config.js';
 import { makeRng } from './random.js';
 
 // A fixed starfield, generated once so it never twinkles between frames.
@@ -342,11 +342,98 @@ export function drawFloatText(ctx, text) {
   ctx.restore();
 }
 
+export function drawShard(ctx, shard, time) {
+  const { x, y } = shard;
+  const bobY = y + Math.sin(shard.bob) * 5;
+  const pulse = 0.82 + 0.18 * Math.sin(shard.bob * 2.2);
+
+  ctx.save();
+  ctx.translate(x, bobY);
+
+  ctx.globalCompositeOperation = 'lighter';
+  const glow = ctx.createRadialGradient(0, 0, 1, 0, 0, 24 * pulse);
+  glow.addColorStop(0, 'rgba(255, 246, 190, 0.95)');
+  glow.addColorStop(0.4, 'rgba(255, 212, 90, 0.55)');
+  glow.addColorStop(1, 'rgba(255, 180, 40, 0)');
+  ctx.fillStyle = glow;
+  circle(ctx, 0, 0, 24 * pulse);
+  ctx.fill();
+
+  ctx.rotate(shard.bob * 0.45);
+  ctx.fillStyle = '#fffdf0';
+  ctx.shadowColor = '#ffc83b';
+  ctx.shadowBlur = 12;
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = (i * Math.PI) / 3;
+    const r1 = 9;
+    const r2 = 4.2;
+    ctx.lineTo(Math.cos(a) * r1, Math.sin(a) * r1);
+    ctx.lineTo(Math.cos(a + Math.PI / 6) * r2, Math.sin(a + Math.PI / 6) * r2);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+export function drawAimReticle(ctx, mouse, time) {
+  const { x, y } = mouse;
+  const pulse = 1 + 0.1 * Math.sin(time * 7);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.strokeStyle = 'rgba(255, 233, 168, 0.65)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(0, 0, 9 * pulse, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(0, -13 * pulse); ctx.lineTo(0, -5 * pulse);
+  ctx.moveTo(0, 5 * pulse);   ctx.lineTo(0, 13 * pulse);
+  ctx.moveTo(-13 * pulse, 0); ctx.lineTo(-5 * pulse, 0);
+  ctx.moveTo(5 * pulse, 0);  ctx.lineTo(13 * pulse, 0);
+  ctx.stroke();
+
+  ctx.fillStyle = '#ffe9a8';
+  circle(ctx, 0, 0, 1.8);
+  ctx.fill();
+  ctx.restore();
+}
+
 export function drawPlayer(ctx, player, time) {
+  // Radiant afterimage trail when dashing
+  if (player.afterimages && player.afterimages.length > 0) {
+    for (const ghost of player.afterimages) {
+      const alpha = (ghost.life / ghost.maxLife) * 0.4;
+      ctx.save();
+      ctx.translate(ghost.x, ghost.y);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#78e7d2';
+      ctx.shadowColor = '#6ef0d8';
+      ctx.shadowBlur = 14;
+      circle(ctx, 0, 0, player.radius + 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
   ctx.save();
   ctx.translate(player.x, player.y);
   const flash = player.hurtTimer > 0 && Math.floor(time * 12) % 2 === 0;
   ctx.globalAlpha = flash ? 0.45 : 1;
+
+  // Dash aura glow
+  if (player.dashing) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const dashGlow = ctx.createRadialGradient(0, 0, 2, 0, 0, 32);
+    dashGlow.addColorStop(0, 'rgba(142, 245, 216, 0.7)');
+    dashGlow.addColorStop(1, 'rgba(142, 245, 216, 0)');
+    ctx.fillStyle = dashGlow;
+    circle(ctx, 0, 0, 32);
+    ctx.fill();
+    ctx.restore();
+  }
 
   // Lantern-warden cloak.
   ctx.fillStyle = '#2b3a4a';
@@ -441,9 +528,12 @@ function bar(ctx, x, y, w, h, ratio, fillTop, fillBottom, label, valueText) {
 
 export function drawHud(ctx, game) {
   const flameRatio = game.flame / game.maxFlame;
-  // Flame and warden strength, top-left.
+  // Flame, warden health, and dash cooldown, top-left.
   bar(ctx, 22, 34, 230, 14, flameRatio, '#ffe27a', '#e07818', 'LANTERN FLAME', `${Math.ceil(game.flame)}`);
-  bar(ctx, 22, 84, 230, 10, game.player.hp / PLAYER.maxHp, '#9ff0e4', '#1f8f83', 'WARDEN', `${Math.ceil(game.player.hp)}`);
+  bar(ctx, 22, 80, 230, 10, game.player.hp / PLAYER.maxHp, '#9ff0e4', '#1f8f83', 'WARDEN', `${Math.ceil(game.player.hp)}`);
+
+  const dashRatio = 1 - (game.player.dashCooldown / DASH.cooldown);
+  bar(ctx, 22, 120, 140, 6, dashRatio, '#8ee8d8', '#2fa998', 'DASH [SHIFT/RMB]', game.player.dashCooldown <= 0 ? 'READY' : '');
 
   // Wave and remaining shades, top-center.
   ctx.save();
@@ -459,7 +549,7 @@ export function drawHud(ctx, game) {
   ctx.fillText(remaining === 0 ? 'the rim is quiet…' : `${remaining} shade${remaining === 1 ? '' : 's'} on the field`, VIEW.w / 2, 54);
   ctx.restore();
 
-  // Score, top-right.
+  // Score and combos, top-right.
   ctx.save();
   ctx.textAlign = 'right';
   ctx.font = 'bold 21px Georgia, serif';
@@ -470,6 +560,30 @@ export function drawHud(ctx, game) {
   ctx.font = '11px Georgia, serif';
   ctx.fillStyle = 'rgba(232,226,208,0.7)';
   ctx.fillText(`BEST ${game.best}`, VIEW.w - 22, 52);
+
+  if (game.combo > 1 && game.comboTimer > 0) {
+    const mult = Math.min(game.combo, COMBO.maxMultiplier);
+    const pulse = 1 + 0.08 * Math.sin(game.time * 12);
+    ctx.font = `bold ${Math.round(18 * pulse)}px Georgia, serif`;
+    ctx.fillStyle = '#ffdf6d';
+    ctx.shadowColor = '#ffb300';
+    ctx.shadowBlur = 10;
+    ctx.fillText(`COMBO x${mult}`, VIEW.w - 22, 78);
+
+    // Combo timer decay line
+    const cRatio = Math.max(0, game.comboTimer / COMBO.timeout);
+    ctx.fillStyle = 'rgba(255, 223, 109, 0.75)';
+    ctx.fillRect(VIEW.w - 22 - 76 * cRatio, 85, 76 * cRatio, 3);
+  }
+
+  if (game.shardsCount > 0) {
+    ctx.font = '12px Georgia, serif';
+    ctx.fillStyle = '#ffd970';
+    ctx.shadowBlur = 4;
+    ctx.shadowColor = '#000';
+    const sy = (game.combo > 1 && game.comboTimer > 0) ? 106 : 76;
+    ctx.fillText(`✦ ${game.shardsCount} SHARDS`, VIEW.w - 22, sy);
+  }
   ctx.restore();
 
   // Daybreak gauge, bottom-center.
